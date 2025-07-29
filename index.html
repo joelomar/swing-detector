@@ -34,99 +34,111 @@
   <h1>Golf Swing Tracker</h1>
   <button onclick="startTracking()">Start Swing</button>
   <button onclick="stopTracking()">Stop</button>
+
   <div id="output">
     <p>X: <span id="x">0</span></p>
     <p>Y: <span id="y">0</span></p>
     <p>Z: <span id="z">0</span></p>
-    <p>Status: <span id="status">Idle</span></p>
-    <p>Peak Speed (m/s): <span id="speed">0</span></p>
     <p>Peak Linear Speed (m/s): <span id="linear-speed">0</span></p>
-<p>Peak Angular Speed (°/s): <span id="angular-speed">0</span></p>
+    <p>Peak Angular Speed (°/s): <span id="angular-speed">0</span></p>
+    <p>Status: <span id="status">Idle</span></p>
   </div>
 
-<script>
-  let tracking = false;
-  let threshold = 15; // Acceleration threshold to detect swing
-  let listener = null;
-  let lastTime = null;
-  let linearSpeed = 0;
-  let angularSpeed = 0;
-  let peakLinearSpeed = 0;
-  let peakAngularSpeed = 0;
+  <script>
+    let tracking = false;
+    let listener = null;
+    let lastTime = null;
 
-  async function startTracking() {
-    if (typeof DeviceMotionEvent.requestPermission === 'function') {
-      const response = await DeviceMotionEvent.requestPermission();
-      if (response !== 'granted') {
-        alert('Permission denied');
-        return;
+    let linearSpeed = 0;
+    let angularSpeed = 0;
+    let peakLinearSpeed = 0;
+    let peakAngularSpeed = 0;
+
+    const ACC_THRESHOLD = 2.0; // Ignore tiny motion
+    const GYRO_THRESHOLD = 10.0; // Ignore minor hand shakes
+    const SWING_TRIGGER_THRESHOLD = 15.0; // Swing detection threshold
+
+    async function startTracking() {
+      // iOS requires permission
+      if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        const response = await DeviceMotionEvent.requestPermission();
+        if (response !== 'granted') {
+          alert('Motion permission denied.');
+          return;
+        }
       }
+
+      document.getElementById('status').textContent = "Tracking...";
+      document.getElementById('linear-speed').textContent = "0";
+      document.getElementById('angular-speed').textContent = "0";
+
+      // Reset tracking state
+      linearSpeed = 0;
+      angularSpeed = 0;
+      peakLinearSpeed = 0;
+      peakAngularSpeed = 0;
+      lastTime = null;
+      tracking = true;
+
+      listener = function(event) {
+        const accData = event.acceleration || { x: 0, y: 0, z: 0 };
+        const gyroData = event.rotationRate || { alpha: 0, beta: 0, gamma: 0 };
+
+        const x = accData.x || 0;
+        const y = accData.y || 0;
+        const z = accData.z || 0;
+
+        const now = Date.now();
+        const deltaTime = lastTime ? (now - lastTime) / 1000 : 0;
+        lastTime = now;
+
+        const totalAcc = Math.sqrt(x * x + y * y + z * z);
+
+        // Filter out low movement
+        if (totalAcc > ACC_THRESHOLD && deltaTime > 0) {
+          linearSpeed += totalAcc * deltaTime;
+          if (linearSpeed > peakLinearSpeed) {
+            peakLinearSpeed = linearSpeed;
+          }
+        }
+
+        // Calculate angular velocity magnitude
+        const gx = gyroData.alpha || 0;
+        const gy = gyroData.beta || 0;
+        const gz = gyroData.gamma || 0;
+        const angularVelocity = Math.sqrt(gx * gx + gy * gy + gz * gz);
+
+        if (angularVelocity > GYRO_THRESHOLD) {
+          if (angularVelocity > peakAngularSpeed) {
+            peakAngularSpeed = angularVelocity;
+          }
+        }
+
+        // Update UI
+        document.getElementById('x').textContent = x.toFixed(2);
+        document.getElementById('y').textContent = y.toFixed(2);
+        document.getElementById('z').textContent = z.toFixed(2);
+        document.getElementById('linear-speed').textContent = peakLinearSpeed.toFixed(2);
+        document.getElementById('angular-speed').textContent = peakAngularSpeed.toFixed(2);
+
+        // Detect swing
+        if (totalAcc > SWING_TRIGGER_THRESHOLD) {
+          document.getElementById('status').innerHTML = '<span class="highlight">Swing Detected!</span>';
+          stopTracking();
+        }
+      };
+
+      window.addEventListener('devicemotion', listener);
     }
 
-    document.getElementById('status').textContent = "Tracking...";
-    document.getElementById('linear-speed').textContent = "0";
-    document.getElementById('angular-speed').textContent = "0";
-
-    linearSpeed = 0;
-    angularSpeed = 0;
-    peakLinearSpeed = 0;
-    peakAngularSpeed = 0;
-    lastTime = null;
-    tracking = true;
-
-    listener = function(event) {
-      const acc = event.accelerationIncludingGravity;
-      const gyro = event.rotationRate;
-
-      const x = acc?.x || 0;
-      const y = acc?.y || 0;
-      const z = acc?.z || 0;
-
-      const now = Date.now();
-      const deltaTime = lastTime ? (now - lastTime) / 1000 : 0;
-      lastTime = now;
-
-      const totalAcc = Math.sqrt(x * x + y * y + z * z); // m/s²
-
-      // Estimate linear speed
-      if (deltaTime > 0) {
-        linearSpeed += totalAcc * deltaTime;
-        if (linearSpeed > peakLinearSpeed) peakLinearSpeed = linearSpeed;
+    function stopTracking() {
+      if (listener) {
+        window.removeEventListener('devicemotion', listener);
+        listener = null;
       }
-
-      // Estimate angular speed
-      const gx = gyro?.alpha || 0;
-      const gy = gyro?.beta || 0;
-      const gz = gyro?.gamma || 0;
-      const angularVelocity = Math.sqrt(gx * gx + gy * gy + gz * gz); // deg/sec
-      if (angularVelocity > peakAngularSpeed) peakAngularSpeed = angularVelocity;
-
-      // Update UI
-      document.getElementById('x').textContent = x.toFixed(2);
-      document.getElementById('y').textContent = y.toFixed(2);
-      document.getElementById('z').textContent = z.toFixed(2);
-      document.getElementById('linear-speed').textContent = peakLinearSpeed.toFixed(2);
-      document.getElementById('angular-speed').textContent = peakAngularSpeed.toFixed(2);
-
-      if (totalAcc > threshold) {
-        document.getElementById('status').innerHTML = '<span class="highlight">Swing Detected!</span>';
-        stopTracking();
-      }
-    };
-
-    window.addEventListener('devicemotion', listener);
-  }
-
-  function stopTracking() {
-    if (listener) {
-      window.removeEventListener('devicemotion', listener);
-      listener = null;
+      tracking = false;
+      document.getElementById('status').textContent = "Stopped";
     }
-    tracking = false;
-    document.getElementById('status').textContent = "Stopped";
-  }
-</script>
-
-
+  </script>
 </body>
 </html>
