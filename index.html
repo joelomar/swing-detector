@@ -40,15 +40,19 @@
     <p>Z: <span id="z">0</span></p>
     <p>Status: <span id="status">Idle</span></p>
     <p>Peak Speed (m/s): <span id="speed">0</span></p>
+    <p>Peak Linear Speed (m/s): <span id="linear-speed">0</span></p>
+<p>Peak Angular Speed (°/s): <span id="angular-speed">0</span></p>
   </div>
 
 <script>
   let tracking = false;
-  let threshold = 15; // Customize this based on swing intensity
+  let threshold = 15; // Acceleration threshold to detect swing
   let listener = null;
   let lastTime = null;
-  let speed = 0;
-  let peakSpeed = 0;
+  let linearSpeed = 0;
+  let angularSpeed = 0;
+  let peakLinearSpeed = 0;
+  let peakAngularSpeed = 0;
 
   async function startTracking() {
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -60,33 +64,49 @@
     }
 
     document.getElementById('status').textContent = "Tracking...";
-    document.getElementById('speed').textContent = "0";
-    speed = 0;
-    peakSpeed = 0;
+    document.getElementById('linear-speed').textContent = "0";
+    document.getElementById('angular-speed').textContent = "0";
+
+    linearSpeed = 0;
+    angularSpeed = 0;
+    peakLinearSpeed = 0;
+    peakAngularSpeed = 0;
     lastTime = null;
     tracking = true;
 
     listener = function(event) {
       const acc = event.accelerationIncludingGravity;
-      const x = acc.x || 0;
-      const y = acc.y || 0;
-      const z = acc.z || 0;
+      const gyro = event.rotationRate;
+
+      const x = acc?.x || 0;
+      const y = acc?.y || 0;
+      const z = acc?.z || 0;
 
       const now = Date.now();
       const deltaTime = lastTime ? (now - lastTime) / 1000 : 0;
       lastTime = now;
 
+      const totalAcc = Math.sqrt(x * x + y * y + z * z); // m/s²
+
+      // Estimate linear speed
+      if (deltaTime > 0) {
+        linearSpeed += totalAcc * deltaTime;
+        if (linearSpeed > peakLinearSpeed) peakLinearSpeed = linearSpeed;
+      }
+
+      // Estimate angular speed
+      const gx = gyro?.alpha || 0;
+      const gy = gyro?.beta || 0;
+      const gz = gyro?.gamma || 0;
+      const angularVelocity = Math.sqrt(gx * gx + gy * gy + gz * gz); // deg/sec
+      if (angularVelocity > peakAngularSpeed) peakAngularSpeed = angularVelocity;
+
+      // Update UI
       document.getElementById('x').textContent = x.toFixed(2);
       document.getElementById('y').textContent = y.toFixed(2);
       document.getElementById('z').textContent = z.toFixed(2);
-
-      const totalAcc = Math.sqrt(x * x + y * y + z * z);
-
-      if (deltaTime > 0) {
-        speed += totalAcc * deltaTime;
-        if (speed > peakSpeed) peakSpeed = speed;
-        document.getElementById('speed').textContent = peakSpeed.toFixed(2);
-      }
+      document.getElementById('linear-speed').textContent = peakLinearSpeed.toFixed(2);
+      document.getElementById('angular-speed').textContent = peakAngularSpeed.toFixed(2);
 
       if (totalAcc > threshold) {
         document.getElementById('status').innerHTML = '<span class="highlight">Swing Detected!</span>';
@@ -106,6 +126,7 @@
     document.getElementById('status').textContent = "Stopped";
   }
 </script>
+
 
 </body>
 </html>
