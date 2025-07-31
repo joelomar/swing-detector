@@ -3,22 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Golf Swing Tracker</title>
+  <title>Simple Golf Swing Speed Tracker</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      padding: 20px;
-      background-color: #f2f2f2;
       text-align: center;
+      padding: 20px;
+      background: #f2f2f2;
     }
     button {
-      padding: 15px 25px;
+      padding: 12px 20px;
       margin: 10px;
       font-size: 16px;
-      border: none;
-      border-radius: 10px;
-      background-color: #28a745;
+      background-color: #007bff;
       color: white;
+      border: none;
+      border-radius: 8px;
     }
     #output {
       margin-top: 20px;
@@ -31,28 +31,25 @@
   </style>
 </head>
 <body>
-  <h1>Golf Swing Tracker</h1>
-  <button onclick="startTracking()">Start Swing</button>
+  <h1>Swing Speed Tracker</h1>
+  <button onclick="startTracking()">Start</button>
   <button onclick="stopTracking()">Stop</button>
+
   <div id="output">
     <p>X: <span id="x">0</span></p>
     <p>Y: <span id="y">0</span></p>
     <p>Z: <span id="z">0</span></p>
     <p>Status: <span id="status">Idle</span></p>
     <p>Peak Speed (m/s): <span id="speed">0</span></p>
-    <p>Peak Linear Speed (m/s): <span id="linear-speed">0</span></p>
-<p>Peak Angular Speed (°/s): <span id="angular-speed">0</span></p>
   </div>
 
 <script>
-  let tracking = false;
-  let threshold = 15; // Acceleration threshold to detect swing
   let listener = null;
+  let tracking = false;
   let lastTime = null;
-  let linearSpeed = 0;
-  let angularSpeed = 0;
-  let peakLinearSpeed = 0;
-  let peakAngularSpeed = 0;
+  let speed = 0;
+  let peakSpeed = 0;
+  const threshold = 15; // swing detection acceleration (m/s²)
 
   async function startTracking() {
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
@@ -63,50 +60,35 @@
       }
     }
 
-    document.getElementById('status').textContent = "Tracking...";
-    document.getElementById('linear-speed').textContent = "0";
-    document.getElementById('angular-speed').textContent = "0";
-
-    linearSpeed = 0;
-    angularSpeed = 0;
-    peakLinearSpeed = 0;
-    peakAngularSpeed = 0;
-    lastTime = null;
     tracking = true;
+    lastTime = null;
+    speed = 0;
+    peakSpeed = 0;
+    document.getElementById('status').textContent = "Tracking...";
+    document.getElementById('speed').textContent = "0";
 
     listener = function(event) {
-      const acc = event.accelerationIncludingGravity;
-      const gyro = event.rotationRate;
+      const acc = event.acceleration;
+      if (!acc) return;
 
-      const x = acc?.x || 0;
-      const y = acc?.y || 0;
-      const z = acc?.z || 0;
+      const x = acc.x || 0;
+      const y = acc.y || 0;
+      const z = acc.z || 0;
 
+      const totalAcc = Math.sqrt(x * x + y * y + z * z);
       const now = Date.now();
       const deltaTime = lastTime ? (now - lastTime) / 1000 : 0;
       lastTime = now;
 
-      const totalAcc = Math.sqrt(x * x + y * y + z * z); // m/s²
-
-      // Estimate linear speed
       if (deltaTime > 0) {
-        linearSpeed += totalAcc * deltaTime;
-        if (linearSpeed > peakLinearSpeed) peakLinearSpeed = linearSpeed;
+        speed += totalAcc * deltaTime;
+        if (speed > peakSpeed) peakSpeed = speed;
       }
 
-      // Estimate angular speed
-      const gx = gyro?.alpha || 0;
-      const gy = gyro?.beta || 0;
-      const gz = gyro?.gamma || 0;
-      const angularVelocity = Math.sqrt(gx * gx + gy * gy + gz * gz); // deg/sec
-      if (angularVelocity > peakAngularSpeed) peakAngularSpeed = angularVelocity;
-
-      // Update UI
       document.getElementById('x').textContent = x.toFixed(2);
       document.getElementById('y').textContent = y.toFixed(2);
       document.getElementById('z').textContent = z.toFixed(2);
-      document.getElementById('linear-speed').textContent = peakLinearSpeed.toFixed(2);
-      document.getElementById('angular-speed').textContent = peakAngularSpeed.toFixed(2);
+      document.getElementById('speed').textContent = peakSpeed.toFixed(2);
 
       if (totalAcc > threshold) {
         document.getElementById('status').innerHTML = '<span class="highlight">Swing Detected!</span>';
@@ -126,7 +108,6 @@
     document.getElementById('status').textContent = "Stopped";
   }
 </script>
-
 
 </body>
 </html>
