@@ -3,35 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Simple Golf Swing Speed Tracker</title>
+  <title>Golf Swing Speed</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding: 20px;
-      background: #f2f2f2;
-    }
-    button {
-      padding: 12px 20px;
-      margin: 10px;
-      font-size: 16px;
-      background-color: #007bff;
-      color: white;
-      border: none;
-      border-radius: 8px;
-    }
-    #output {
-      margin-top: 20px;
-      font-size: 18px;
-    }
-    .highlight {
-      color: red;
-      font-weight: bold;
-    }
+    body { font-family: sans-serif; text-align: center; padding: 20px; background: #f2f2f2; }
+    button { padding: 15px 30px; font-size: 18px; margin: 10px; border: none; border-radius: 8px; background: #28a745; color: white; }
+    #output { margin-top: 20px; font-size: 18px; }
+    .highlight { color: red; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h1>Swing Speed Tracker</h1>
+
+  <h1>Golf Swing Speed</h1>
   <button onclick="startTracking()">Start</button>
   <button onclick="stopTracking()">Stop</button>
 
@@ -43,71 +25,75 @@
     <p>Peak Speed (m/s): <span id="speed">0</span></p>
   </div>
 
-<script>
-  let listener = null;
-  let tracking = false;
-  let lastTime = null;
-  let speed = 0;
-  let peakSpeed = 0;
-  const threshold = 15; // swing detection acceleration (m/s²)
+  <script>
+    let tracking = false;
+    let listener = null;
+    let lastTime = null;
+    let linearSpeed = 0;
+    let peakSpeed = 0;
+    let swingDetected = false;
 
-  async function startTracking() {
-    if (typeof DeviceMotionEvent.requestPermission === 'function') {
-      const response = await DeviceMotionEvent.requestPermission();
-      if (response !== 'granted') {
-        alert('Permission denied');
-        return;
+    async function startTracking() {
+      if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        const permission = await DeviceMotionEvent.requestPermission();
+        if (permission !== 'granted') {
+          alert('Motion permission denied');
+          return;
+        }
       }
+
+      document.getElementById('status').textContent = "Tracking...";
+      document.getElementById('speed').textContent = "0";
+      linearSpeed = 0;
+      peakSpeed = 0;
+      lastTime = null;
+      swingDetected = false;
+
+      listener = (e) => {
+        const acc = e.acceleration || e.accelerationIncludingGravity;
+        const x = acc?.x || 0;
+        const y = acc?.y || 0;
+        const z = acc?.z || 0;
+
+        const now = Date.now();
+        const deltaTime = lastTime ? (now - lastTime) / 1000 : 0;
+        lastTime = now;
+
+        const totalAcc = Math.sqrt(x * x + y * y + z * z);
+
+        // Filter out noise below 1 m/s²
+        if (totalAcc < 1) return;
+
+        if (deltaTime > 0) {
+          linearSpeed += totalAcc * deltaTime;
+          if (linearSpeed > peakSpeed) peakSpeed = linearSpeed;
+        }
+
+        document.getElementById('x').textContent = x.toFixed(2);
+        document.getElementById('y').textContent = y.toFixed(2);
+        document.getElementById('z').textContent = z.toFixed(2);
+        document.getElementById('speed').textContent = peakSpeed.toFixed(2);
+
+        if (totalAcc > 15 && !swingDetected) {
+          document.getElementById('status').innerHTML = '<span class="highlight">Swing Detected!</span>';
+          swingDetected = true;
+        }
+      };
+
+      window.addEventListener('devicemotion', listener);
+      tracking = true;
     }
 
-    tracking = true;
-    lastTime = null;
-    speed = 0;
-    peakSpeed = 0;
-    document.getElementById('status').textContent = "Tracking...";
-    document.getElementById('speed').textContent = "0";
-
-    listener = function(event) {
-      const acc = event.acceleration;
-      if (!acc) return;
-
-      const x = acc.x || 0;
-      const y = acc.y || 0;
-      const z = acc.z || 0;
-
-      const totalAcc = Math.sqrt(x * x + y * y + z * z);
-      const now = Date.now();
-      const deltaTime = lastTime ? (now - lastTime) / 1000 : 0;
-      lastTime = now;
-
-      if (deltaTime > 0) {
-        speed += totalAcc * deltaTime;
-        if (speed > peakSpeed) peakSpeed = speed;
+    function stopTracking() {
+      if (listener) {
+        window.removeEventListener('devicemotion', listener);
+        listener = null;
       }
-
-      document.getElementById('x').textContent = x.toFixed(2);
-      document.getElementById('y').textContent = y.toFixed(2);
-      document.getElementById('z').textContent = z.toFixed(2);
-      document.getElementById('speed').textContent = peakSpeed.toFixed(2);
-
-      if (totalAcc > threshold) {
-        document.getElementById('status').innerHTML = '<span class="highlight">Swing Detected!</span>';
-        stopTracking();
-      }
-    };
-
-    window.addEventListener('devicemotion', listener);
-  }
-
-  function stopTracking() {
-    if (listener) {
-      window.removeEventListener('devicemotion', listener);
-      listener = null;
+      tracking = false;
+      document.getElementById('status').textContent = "Stopped";
     }
-    tracking = false;
-    document.getElementById('status').textContent = "Stopped";
-  }
-</script>
+  </script>
 
 </body>
 </html>
+
